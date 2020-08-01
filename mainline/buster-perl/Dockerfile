@@ -2,11 +2,21 @@ FROM debian:buster-slim
 
 LABEL maintainer="NGINX Docker Maintainers <docker-maint@nginx.com>"
 
-ENV NGINX_VERSION   1.19.1
-ENV NJS_VERSION     0.4.2
+ARG NGINX_REPO_CRT
+ARG NGINX_REPO_KEY
+
+ENV NGINX_VERSION   22
+ENV NJS_VERSION     0.4.1
 ENV PKG_RELEASE     1~buster
 
 RUN set -x \
+    && mkdir -p /etc/ssl/nginx \
+    && echo '-----BEGIN CERTIFICATE-----' > /etc/ssl/nginx/nginx-repo.crt \
+    && echo "$NGINX_REPO_CRT" >> /etc/ssl/nginx/nginx-repo.crt \
+    && echo '-----END CERTIFICATE-----' >> /etc/ssl/nginx/nginx-repo.crt \
+    && echo '-----BEGIN PRIVATE KEY-----' > /etc/ssl/nginx/nginx-repo.key \
+    && echo "$NGINX_REPO_KEY" >> /etc/ssl/nginx/nginx-repo.key \
+    && echo '-----END PRIVATE KEY-----' >> /etc/ssl/nginx/nginx-repo.key \
 # create nginx user/group first, to be consistent throughout docker variants
     && addgroup --system --gid 101 nginx \
     && adduser --system --disabled-login --ingroup nginx --no-create-home --home /nonexistent --gecos "nginx user" --shell /bin/false --uid 101 nginx \
@@ -26,68 +36,30 @@ RUN set -x \
     done; \
     test -z "$found" && echo >&2 "error: failed to fetch GPG key $NGINX_GPGKEY" && exit 1; \
     apt-get remove --purge --auto-remove -y gnupg1 && rm -rf /var/lib/apt/lists/* \
-    && dpkgArch="$(dpkg --print-architecture)" \
+# Install the latest release of NGINX Plus and/or NGINX Plus modules
+# Uncomment individual modules if necessary
+# Use versioned packages over defaults to specify a release
     && nginxPackages=" \
-        nginx=${NGINX_VERSION}-${PKG_RELEASE} \
-        nginx-module-xslt=${NGINX_VERSION}-${PKG_RELEASE} \
-        nginx-module-geoip=${NGINX_VERSION}-${PKG_RELEASE} \
-        nginx-module-image-filter=${NGINX_VERSION}-${PKG_RELEASE} \
-        nginx-module-perl=${NGINX_VERSION}-${PKG_RELEASE} \
-        nginx-module-njs=${NGINX_VERSION}.${NJS_VERSION}-${PKG_RELEASE} \
+        nginx-plus \
+        nginx-plus=${NGINX_VERSION}-${PKG_RELEASE} \
+        nginx-plus-module-xslt=${NGINX_VERSION}-${PKG_RELEASE} \
+        nginx-plus-module-geoip=${NGINX_VERSION}-${PKG_RELEASE} \
+        nginx-plus-module-image-filter=${NGINX_VERSION}-${PKG_RELEASE} \
+        nginx-plus-module-perl=${NGINX_VERSION}-${PKG_RELEASE} \
+        nginx-plus-module-njs=${NGINX_VERSION}+${NJS_VERSION}-${PKG_RELEASE} \
     " \
-    && case "$dpkgArch" in \
-        amd64|i386) \
-# arches officialy built by upstream
-            echo "deb https://nginx.org/packages/mainline/debian/ buster nginx" >> /etc/apt/sources.list.d/nginx.list \
-            && apt-get update \
-            ;; \
-        *) \
-# we're on an architecture upstream doesn't officially build for
-# let's build binaries from the published source packages
-            echo "deb-src https://nginx.org/packages/mainline/debian/ buster nginx" >> /etc/apt/sources.list.d/nginx.list \
-            \
-# new directory for storing sources and .deb files
-            && tempDir="$(mktemp -d)" \
-            && chmod 777 "$tempDir" \
-# (777 to ensure APT's "_apt" user can access it too)
-            \
-# save list of currently-installed packages so build dependencies can be cleanly removed later
-            && savedAptMark="$(apt-mark showmanual)" \
-            \
-# build .deb files from upstream's source packages (which are verified by apt-get)
-            && apt-get update \
-            && apt-get build-dep -y $nginxPackages \
-            && ( \
-                cd "$tempDir" \
-                && DEB_BUILD_OPTIONS="nocheck parallel=$(nproc)" \
-                    apt-get source --compile $nginxPackages \
-            ) \
-# we don't remove APT lists here because they get re-downloaded and removed later
-            \
-# reset apt-mark's "manual" list so that "purge --auto-remove" will remove all build dependencies
-# (which is done after we install the built packages so we don't have to redownload any overlapping dependencies)
-            && apt-mark showmanual | xargs apt-mark auto > /dev/null \
-            && { [ -z "$savedAptMark" ] || apt-mark manual $savedAptMark; } \
-            \
-# create a temporary local APT repo to install from (so that dependency resolution can be handled by APT, as it should be)
-            && ls -lAFh "$tempDir" \
-            && ( cd "$tempDir" && dpkg-scanpackages . > Packages ) \
-            && grep '^Package: ' "$tempDir/Packages" \
-            && echo "deb [ trusted=yes ] file://$tempDir ./" > /etc/apt/sources.list.d/temp.list \
-# work around the following APT issue by using "Acquire::GzipIndexes=false" (overriding "/etc/apt/apt.conf.d/docker-gzip-indexes")
-#   Could not open file /var/lib/apt/lists/partial/_tmp_tmp.ODWljpQfkE_._Packages - open (13: Permission denied)
-#   ...
-#   E: Failed to fetch store:/var/lib/apt/lists/partial/_tmp_tmp.ODWljpQfkE_._Packages  Could not open file /var/lib/apt/lists/partial/_tmp_tmp.ODWljpQfkE_._Packages - open (13: Permission denied)
-            && apt-get -o Acquire::GzipIndexes=false update \
-            ;; \
-    esac \
-    \
+    && echo "Acquire::https::plus-pkgs.nginx.com::Verify-Peer \"true\";" >> /etc/apt/apt.conf.d/90nginx \
+    && echo "Acquire::https::plus-pkgs.nginx.com::Verify-Host \"true\";" >> /etc/apt/apt.conf.d/90nginx \
+    && echo "Acquire::https::plus-pkgs.nginx.com::SslCert     \"/etc/ssl/nginx/nginx-repo.crt\";" >> /etc/apt/apt.conf.d/90nginx \
+    && echo "Acquire::https::plus-pkgs.nginx.com::SslKey      \"/etc/ssl/nginx/nginx-repo.key\";" >> /etc/apt/apt.conf.d/90nginx \
+    && printf "deb https://plus-pkgs.nginx.com/debian buster nginx-plus\n" > /etc/apt/sources.list.d/nginx-plus.list \
+    && apt-get update \
     && apt-get install --no-install-recommends --no-install-suggests -y \
                         $nginxPackages \
                         gettext-base \
                         curl \
-    && apt-get remove --purge --auto-remove -y && rm -rf /var/lib/apt/lists/* /etc/apt/sources.list.d/nginx.list \
-    \
+    && apt-get remove --purge --auto-remove -y && rm -rf /var/lib/apt/lists/* /etc/apt/sources.list.d/nginx-plus.list \
+    && rm -rf /etc/apt/apt.conf.d/90nginx /etc/ssl/nginx \
 # if we have leftovers from building, let's purge them (including extra, unnecessary build deps)
     && if [ -n "$tempDir" ]; then \
         apt-get purge -y --auto-remove \
