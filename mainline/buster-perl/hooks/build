@@ -3,4 +3,4 @@ docker build \
   --build-arg NGINX_REPO_CRT=$NGINX_REPO_CRT \
   --build-arg NGINX_REPO_KEY=$NGINX_REPO_KEY \
   -f $DOCKERFILE_PATH \
-  -t $IMAGE_NAME .
+  -t $DOCKER_REPO:${DOCKER_TAG//,/ -t $DOCKER_REPO:} .
