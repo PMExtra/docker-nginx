@@ -5,38 +5,32 @@ shopt -s nullglob
 cd "$(dirname "$(readlink -f "$BASH_SOURCE")")"
 
 declare branches=(
-    "stable"
-    "mainline"
+    "plus"
 )
 
 # Current nginx versions
 # Remember to update pkgosschecksum when changing this.
 declare -A nginx=(
-    [mainline]='1.21.4'
-    [stable]='1.20.1'
+    [plus]='25'
 )
 
 # Current njs versions
 declare -A njs=(
-    [mainline]='0.7.0'
-    [stable]='0.5.3'
+    [plus]='0.7.0'
 )
 
 # Current package patchlevel version
 # Remember to update pkgosschecksum when changing this.
 declare -A pkg=(
-    [mainline]=1
-    [stable]=1
+    [plus]=1
 )
 
 declare -A debian=(
-    [mainline]='bullseye'
-    [stable]='buster'
+    [plus]='bullseye'
 )
 
 declare -A alpine=(
-    [mainline]='3.14'
-    [stable]='3.13'
+    [plus]='3.14'
 )
 
 # When we bump njs version in a stable release we don't move the tag in the
@@ -44,17 +38,14 @@ declare -A alpine=(
 # when building alpine packages on architectures not supported by nginx.org
 # Remember to update pkgosschecksum when changing this.
 declare -A rev=(
-    [mainline]='${NGINX_VERSION}-${PKG_RELEASE}'
-    [stable]='${NGINX_VERSION}-${PKG_RELEASE}'
-    #[stable]='500'
+    [plus]='${NGINX_VERSION}-${PKG_RELEASE}'
 )
 
 # Holds SHA512 checksum for the pkg-oss tarball produced by source code
 # revision/tag in the previous block
 # Used in alpine builds for architectures not packaged by nginx.org
 declare -A pkgosschecksum=(
-    [mainline]='f917c27702aa89cda46878fc80d446839c592c43ce7f251b3f4ced60c7033d34496a92d283927225d458cbc4f2f89499e7fb16344923317cd7725ad722eaf93e'
-    [stable]='024718988028320b587f03989b76facff6ba899d9bbb36eeb6564fc2569fc32021427fd35ad24a23d7cec63813227ff2f73c953bbb71786a2d3308e65efaf0b1'
+    [plus]='f917c27702aa89cda46878fc80d446839c592c43ce7f251b3f4ced60c7033d34496a92d283927225d458cbc4f2f89499e7fb16344923317cd7725ad722eaf93e'
 )
 
 get_packages() {
@@ -78,15 +69,15 @@ get_packages() {
 
     case "$distro" in
     *-perl)
-        perl="nginx-module-perl"
+        perl="nginx-plus-module-perl"
         ;;
     esac
 
     echo -n ' \\\n'
-    for p in nginx nginx-module-xslt nginx-module-geoip nginx-module-image-filter $perl; do
+    for p in nginx-plus nginx-plus-module-xslt nginx-plus-module-geoip nginx-plus-module-image-filter $perl; do
         echo -n '        '"$p"'=${NGINX_VERSION}-'"$r"'${PKG_RELEASE} \\\n'
     done
-    for p in nginx-module-njs; do
+    for p in nginx-plus-module-njs; do
         echo -n '        '"$p"'=${NGINX_VERSION}'"$sep"'${NJS_VERSION}-'"$r"'${PKG_RELEASE} \\'
     done
 }
@@ -97,9 +88,9 @@ get_packagerepo() {
     local branch="$1"
     shift
 
-    [ "$branch" = "mainline" ] && branch="$branch/" || branch=""
+    [ "$branch" = "plus" ] && branch="$branch/" || branch=""
 
-    echo "https://nginx.org/packages/${branch}${distro}/"
+    echo "https://pkgs.nginx.com/plus/${distro}/"
 }
 
 get_packagever() {

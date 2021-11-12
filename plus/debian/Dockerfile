@@ -1,12 +1,17 @@
-FROM debian:%%DEBIAN_VERSION%%-slim
+#
+# NOTE: THIS DOCKERFILE IS GENERATED VIA "update.sh"
+#
+# PLEASE DO NOT EDIT IT DIRECTLY.
+#
+FROM debian:bullseye-slim
 
 LABEL maintainer="PM Extra <pm@jubeat.net>"
 
 ARG DEBIAN_MIRROR
 
-ENV NGINX_VERSION   %%NGINX_VERSION%%
-ENV NJS_VERSION     %%NJS_VERSION%%
-ENV PKG_RELEASE     %%PKG_RELEASE%%
+ENV NGINX_VERSION   25
+ENV NJS_VERSION     0.7.0
+ENV PKG_RELEASE     1~bullseye
 
 RUN --mount=type=secret,id=nginx-crt,required=true,uid=100,gid=65534,target=/etc/ssl/nginx/nginx-repo.crt \
     --mount=type=secret,id=nginx-key,required=true,uid=100,gid=65534,target=/etc/ssl/nginx/nginx-repo.key \
@@ -32,7 +37,12 @@ RUN --mount=type=secret,id=nginx-crt,required=true,uid=100,gid=65534,target=/etc
     test -z "$found" && echo >&2 "error: failed to fetch GPG key $NGINX_GPGKEY" && exit 1; \
     apt-get remove --purge --auto-remove -y gnupg1 && rm -rf /var/lib/apt/lists/* \
     && dpkgArch="$(dpkg --print-architecture)" \
-    && nginxPackages="%%PACKAGES%%
+    && nginxPackages=" \
+        nginx-plus=${NGINX_VERSION}-${PKG_RELEASE} \
+        nginx-plus-module-xslt=${NGINX_VERSION}-${PKG_RELEASE} \
+        nginx-plus-module-geoip=${NGINX_VERSION}-${PKG_RELEASE} \
+        nginx-plus-module-image-filter=${NGINX_VERSION}-${PKG_RELEASE} \
+        nginx-plus-module-njs=${NGINX_VERSION}+${NJS_VERSION}-${PKG_RELEASE} \
     " \
     && echo "Acquire::https::pkgs.nginx.com::Verify-Peer \"true\";" > /etc/apt/apt.conf.d/90nginx \
     && echo "Acquire::https::pkgs.nginx.com::Verify-Host \"true\";" >> /etc/apt/apt.conf.d/90nginx \
@@ -41,7 +51,7 @@ RUN --mount=type=secret,id=nginx-crt,required=true,uid=100,gid=65534,target=/etc
     && case "$dpkgArch" in \
         amd64|arm64) \
 # arches officialy built by upstream
-            echo "deb %%PACKAGEREPO%% %%DEBIAN_VERSION%% nginx-plus" >> /etc/apt/sources.list.d/nginx-plus.list \
+            echo "deb https://pkgs.nginx.com/plus/debian/ bullseye nginx-plus" >> /etc/apt/sources.list.d/nginx-plus.list \
             && apt-get update \
             ;; \
         *) \
